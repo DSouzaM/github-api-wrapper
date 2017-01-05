@@ -1,6 +1,5 @@
-import com.dsouzam.githubapi.APIClient
+import com.dsouzam.githubapi.{APIClient, SearchQuery}
 import org.scalatest.FunSuite
-
 import java.util.GregorianCalendar
 
 
@@ -20,4 +19,9 @@ class APIClientTests extends FunSuite {
     assert(user.id == 6363768 && user.blog == "mattdsouza.com")
   }
 
+  test("searchRepos") {
+    val query = SearchQuery("", Some("user:dsouzam language:Scala"), Some("stars"), Some("asc"))
+    val repos = client.searchRepos(query)
+    assert(repos.exists(repo => repo.name == "github-api-wrapper"))
+  }
 }

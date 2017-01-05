@@ -17,14 +17,14 @@ class APIClient(private val authToken: Option[String]) {
     * @param url the URL to access
     * @return JSON result returned by request
     */
-  private def queryUrl(url: String): String = {
+  private def queryUrl(url: String, params: Seq[(String, String)]): String = {
     // it may be worth checking that X-RateLimit-Remaining is non-zero.
     // may want to switch http client to an asynchronous one.
-    val params = authToken match {
-      case Some(token) => Seq(("access_token", token))
-      case None => Seq()
+    val authParams: Seq[(String, String)] = authToken match {
+      case Some(token) => ("access_token", token) +: params
+      case None => params
     }
-    val response = Http(url).params(params).asString
+    val response = Http(url).params(authParams).asString
     if (!response.isSuccess) {
       val result = JSON.parseFull(response.body).get.asInstanceOf[Map[String, Any]]
       sys.error(s"Error code ${response.code} when querying $url: ${result("message")}")
@@ -39,8 +39,8 @@ class APIClient(private val authToken: Option[String]) {
     * @param target e.g. "/users/DSouzaM"
     * @return JSON result returned by request
     */
-  private def query(target: String): String = queryUrl(s"$baseUrl$target")
-
+  private def query(target: String, params: Seq[(String, String)]): String = queryUrl(baseUrl + target, params)
+  private def query(target: String): String = query(target, Seq())
   /**
     * Parses a JSON string to either a List[Any] or Map[String, Any], boxing it in an Either.
     * @param json string of JSON
@@ -57,21 +57,18 @@ class APIClient(private val authToken: Option[String]) {
   }
 
   /**
-    * Performs the API call and parses the JSON result into a Seq of Maps corresponding to each repository.
-    * Makes a second call to retrieve the language information for each repository.
-    * @param user the user to look up
+    * Takes a sequence of repositories as Lists and returns a sequence of Repositories
+    * Makes an API call to retrieve the language information for each repository.
+    * @param repos the user to look up
     * @return a sequence of repository maps
     */
-  private def requestRepos(user: String): Seq[RepositoryResult] = {
-    val json = query(s"/users/$user/repos")
-    val parsed = parse(json).left.get
-
-    parsed.collect{
+  private def generateRepos(repos: List[Any]): Seq[Repository] = {
+    repos.collect{
       case result: Map[_,_] =>
         val stringMap = result.asInstanceOf[Map[String, Any]]
         val fullName = stringMap("full_name").asInstanceOf[String]
         val languages = getLanguages(fullName)
-        RepositoryResult(stringMap, languages)
+        RepositoryResult(stringMap, languages).toRepository
     }
   }
 
@@ -81,8 +78,9 @@ class APIClient(private val authToken: Option[String]) {
     * @return a sequence of Repository objects
     */
   def getRepos(user: String): Seq[Repository] = {
-    val repos = requestRepos(user)
-    repos.map(_.toRepository)
+    val json = query(s"/users/$user/repos")
+    val parsed = parse(json).left.get
+    generateRepos(parsed)
   }
 
   /**
@@ -106,6 +104,19 @@ class APIClient(private val authToken: Option[String]) {
     val result = UserResult(parse(json).right.get)
     result.toUser
   }
+
+  /**
+    * Performs a repository search and returns the sequence of repositories retrieved.
+    * @param searchQuery the query
+    * @return a sequence of Repositories received in the query result
+    */
+  def searchRepos(searchQuery: SearchQuery): Seq[Repository] = {
+    val json = query("/search/repositories", searchQuery.toParams)
+    val result = parse(json).right.get
+    val repoList = result("items").asInstanceOf[List[Any]]
+    generateRepos(repoList)
+  }
+  def searchRepos(searchQuery: String): Seq[Repository] = searchRepos(SearchQuery(searchQuery))
 }
 
 object APIClient {
