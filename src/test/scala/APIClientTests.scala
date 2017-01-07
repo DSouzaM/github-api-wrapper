@@ -1,4 +1,4 @@
-import com.dsouzam.githubapi.{APIClient, SearchQuery}
+import com.dsouzam.githubapi.{APIClient, Qualifier, SearchQuery}
 import org.scalatest.FunSuite
 import java.util.GregorianCalendar
 
@@ -20,7 +20,7 @@ class APIClientTests extends FunSuite {
   }
 
   test("searchRepos") {
-    val query = SearchQuery("", Some("user:dsouzam language:Scala"), Some("stars"), Some("asc"))
+    val query = SearchQuery("", Map(("user",Qualifier("user","dsouzam")),("language",Qualifier("language","Scala"))), Some("stars"), Some("asc"))
     val repos = client.searchRepos(query)
     assert(repos.exists(repo => repo.name == "github-api-wrapper"))
   }
