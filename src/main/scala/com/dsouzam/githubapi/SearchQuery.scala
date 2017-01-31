@@ -4,23 +4,17 @@ case class Qualifier(left: String, right: String, negate: Boolean = false) {
   override def toString: String = (if (negate) "-" else "") + left + ":\"" + right + "\""
 }
 
-case class SearchQuery (query: String, qualifiers: Map[String,Qualifier] = Map(), sort: Option[String] = None, order: Option[String] = None) {
+/** Consult https://developer.github.com/v3/search/ and https://help.github.com/articles/search-syntax/ for details on
+  * parameters and qualifiers.
+  */
+case class SearchQuery(query: String, qualifiers: Map[String,Qualifier] = Map(), parameters: Map[String,String] = Map()) {
 
   /**
     * Returns the parameters for the query
     * @return a sequence of key-value pairs
     */
   def toParams: Seq[(String, String)] = {
-
-    val queryParam = ("q", query + qualString)
-    val sortOptions = sort match {
-      case Some(s) => Seq(("sort", s)) ++ (order match {
-        case Some(o) => Seq(("order", o))
-        case None => Nil
-      })
-      case None => Nil
-    }
-    queryParam +: sortOptions
+    ("q", query + qualString) +: parameters.toSeq
   }
 
   /**
@@ -31,6 +25,21 @@ case class SearchQuery (query: String, qualifiers: Map[String,Qualifier] = Map()
   def qualify(qual: Qualifier): SearchQuery = copy(qualifiers = qualifiers + (qual.left -> qual))
   def qualify(key: String, value: String): SearchQuery = qualify(Qualifier(key, value))
   def exclude(key: String, value: String): SearchQuery = qualify(Qualifier(key, value, negate = true))
+
+  /**
+    * Adds a parameter to the query. Will overwrite other parameters with the same name.
+    * @param param the parameter
+    * @param value the value to assign the parameter
+    * @return query with the updated parameter
+    */
+  def addParam(param: String, value: String): SearchQuery = {
+    assert(param != "q", "Cannot overwrite the search keyword parameter")
+    copy(parameters = parameters + (param -> value))
+  }
+  def sortBy(sort: String): SearchQuery = addParam("sort", sort)
+  def orderBy(order: String): SearchQuery = addParam("order", order)
+  def getPage(pageNumber: Int): SearchQuery = addParam("page", pageNumber.toString)
+  def perPage(pageSize: Int): SearchQuery = addParam("per_page", pageSize.toString)
 
   /**
     * Concatenates all the qualifiers of the query.

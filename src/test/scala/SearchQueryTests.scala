@@ -9,19 +9,14 @@ class SearchQueryTests extends FunSuite{
     assert(params.length == 1 && params.head == ("q", "wrapper in:\"name,description\""))
   }
   test("sortNoOrder") {
-    val query = SearchQuery("wrapper", Map(), Some("stars"))
+    val query = SearchQuery("wrapper", Map(), Map("sort" -> "stars"))
     val params = query.toParams
     assert(params.length == 2 && params.head == ("q", "wrapper") && params(1) == ("sort", "stars"))
   }
   test("sortWithOrder") {
-    val query = SearchQuery("wrapper", Map(), Some("stars"), Some("asc"))
+    val query = SearchQuery("wrapper", Map(), Map("sort" -> "stars", "order" -> "asc"))
     val params = query.toParams
     assert(params.length == 3 && params.head == ("q", "wrapper") && params(1) == ("sort", "stars") && params(2) == ("order", "asc"))
-  }
-  test("orderNoSort") {
-    val query = SearchQuery("wrapper", Map(), None, Some("asc"))
-    val params = query.toParams
-    assert(params.length == 1 && params.head == ("q", "wrapper"))
   }
   test("qualify") {
     val query = SearchQuery("wrapper").qualify("user", "dsouzam").qualify("language","Scala").exclude("size","0")

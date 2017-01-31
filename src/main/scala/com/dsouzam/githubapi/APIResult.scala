@@ -9,7 +9,7 @@ class APIResult(result: Map[String, Any]) {
   def getDate(key: String): Date = APIClient.dateFormatter.parse(getString(key))
 }
 
-case class RepositoryResult(result: Map[String, Any], languages: Map[String, Long]) extends APIResult(result) {
+case class RepositoryResult(result: Map[String, Any], readMe: String, languages: Map[String, Long]) extends APIResult(result) {
   def toRepository: Repository = {
     val url = getString("url")
     val name = getString("name")
@@ -23,7 +23,7 @@ case class RepositoryResult(result: Map[String, Any], languages: Map[String, Lon
     val hasPages = getBoolean("has_pages")
     val forks = getInt("forks_count")
     val defaultBranch = getString("default_branch")
-    Repository(url, name, id, description, languages, createdAt, updatedAt, pushedAt, stars, watchers, hasPages, forks, defaultBranch)
+    Repository(url, name, id, description, readMe, languages, createdAt, updatedAt, pushedAt, stars, watchers, hasPages, forks, defaultBranch)
   }
 }
 

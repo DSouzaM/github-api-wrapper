@@ -13,34 +13,32 @@ class APIClient(private val authToken: Option[String]) {
   def this() = this(None)
 
   /**
-    * Performs a GET request to the specified URL. Provides OAuth token, if available.
-    * @param url the URL to access
-    * @return JSON result returned by request
+    * Queries the GitHub API at the specified endpoint. Provides OAuth token, if available.
+    * @param target the URL to access
+    * @return result returned by request
     */
-  private def queryUrl(url: String, params: Seq[(String, String)]): String = {
+  private def query(target: String, params: Seq[(String, String)] = Seq(), headers: Seq[(String, String)] = Seq(), acceptFailure: Boolean = false): String = {
     // it may be worth checking that X-RateLimit-Remaining is non-zero.
     // may want to switch http client to an asynchronous one.
+    val url = baseUrl + target
     val authParams: Seq[(String, String)] = authToken match {
       case Some(token) => ("access_token", token) +: params
       case None => params
     }
-    val response = Http(url).params(authParams).asString
+    val response = Http(url).params(authParams).headers(headers).asString
     if (!response.isSuccess) {
-      val result = JSON.parseFull(response.body).get.asInstanceOf[Map[String, Any]]
-      sys.error(s"Error code ${response.code} when querying $url: ${result("message")}")
+      if (acceptFailure) {
+        ""
+      } else {
+        val result = JSON.parseFull(response.body).get.asInstanceOf[Map[String, Any]]
+        sys.error(s"Error code ${response.code} when querying $url: ${result("message")}")
+      }
     }
     else {
       response.body
     }
   }
 
-  /**
-    * Queries the GitHub API at the specified endpoint.
-    * @param target e.g. "/users/DSouzaM"
-    * @return JSON result returned by request
-    */
-  private def query(target: String, params: Seq[(String, String)]): String = queryUrl(baseUrl + target, params)
-  private def query(target: String): String = query(target, Seq())
   /**
     * Parses a JSON string to either a List[Any] or Map[String, Any], boxing it in an Either.
     * @param json string of JSON
@@ -56,31 +54,42 @@ class APIClient(private val authToken: Option[String]) {
     }
   }
 
+  /** Takes a repository as a Map and returns a Repository
+    * @param repo Map
+    * @return Repository of corresponding Map, if available
+    */
+  private def generateRepo(repo: Any, withLanguages: Boolean, withReadMe: Boolean): Repository = {
+    repo match {
+      case result: Map[_,_] =>
+        val stringMap = result.asInstanceOf[Map[String, Any]]
+        val fullName = stringMap("full_name").asInstanceOf[String]
+        val languages: Map[String, Long] = if (withLanguages) getLanguages(fullName) else Map[String, Long]()
+        val readMe: String = if (withReadMe) getReadMe(fullName) else ""
+        RepositoryResult(stringMap, readMe, languages).toRepository
+    }
+  }
   /**
     * Takes a sequence of repositories as Lists and returns a sequence of Repositories
     * Makes an API call to retrieve the language information for each repository.
     * @param repos the user to look up
     * @return a sequence of repository maps
     */
-  private def generateRepos(repos: List[Any]): Seq[Repository] = {
-    repos.collect{
-      case result: Map[_,_] =>
-        val stringMap = result.asInstanceOf[Map[String, Any]]
-        val fullName = stringMap("full_name").asInstanceOf[String]
-        val languages = getLanguages(fullName)
-        RepositoryResult(stringMap, languages).toRepository
-    }
-  }
+  private def generateRepos(repos: List[Any], withLanguages: Boolean, withReadMe: Boolean): Seq[Repository] = repos.map(generateRepo(_,withLanguages,withReadMe))
 
+  def getRepo(user: String, repo: String, withLanguages: Boolean = false, withReadMe: Boolean = false): Repository = {
+    val json = query(s"/repos/$user/$repo")
+    val parsed = parse(json).right.get
+    generateRepo(parsed, withLanguages, withReadMe)
+  }
   /**
     * Requests repository information for a user and generates a sequence of Repository objects.
     * @param user the user to look up
     * @return a sequence of Repository objects
     */
-  def getRepos(user: String): Seq[Repository] = {
+  def getRepos(user: String, withLanguages: Boolean = false, withReadMe: Boolean = false): Seq[Repository] = {
     val json = query(s"/users/$user/repos")
     val parsed = parse(json).left.get
-    generateRepos(parsed)
+    generateRepos(parsed, withLanguages, withReadMe)
   }
 
   /**
@@ -92,6 +101,10 @@ class APIClient(private val authToken: Option[String]) {
     val json = query(s"/repos/$repo/languages")
     val parsed = parse(json).right.get
     parsed.transform((str:String, dbl:Any) => dbl.asInstanceOf[Double].toLong)
+  }
+
+  def getReadMe(repo: String): String = {
+    query(s"/repos/$repo/readme", headers = Seq("Accept" -> "application/vnd.github.VERSION.raw"), acceptFailure = true)
   }
 
   /**
@@ -110,11 +123,11 @@ class APIClient(private val authToken: Option[String]) {
     * @param searchQuery the query
     * @return a sequence of Repositories received in the query result
     */
-  def searchRepos(searchQuery: SearchQuery): Seq[Repository] = {
+  def searchRepos(searchQuery: SearchQuery, withLanguages: Boolean = false, withReadMe: Boolean = false): Seq[Repository] = {
     val json = query("/search/repositories", searchQuery.toParams)
     val result = parse(json).right.get
     val repoList = result("items").asInstanceOf[List[Any]]
-    generateRepos(repoList)
+    generateRepos(repoList, withLanguages, withReadMe)
   }
   def searchRepos(searchQuery: String): Seq[Repository] = searchRepos(SearchQuery(searchQuery))
 }
