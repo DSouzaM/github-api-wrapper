@@ -15,6 +15,8 @@ class APIClient(private val authToken: Option[String]) {
   /**
     * Queries the GitHub API at the specified endpoint. Provides OAuth token, if available.
     * @param target the URL to access
+    * @param headers an optional sequence of headers for the request
+    * @param acceptFailure whether or not to hard-fail on failed query
     * @return result returned by request
     */
   private def query(target: String, params: Seq[(String, String)] = Seq(), headers: Seq[(String, String)] = Seq(), acceptFailure: Boolean = false): String = {
@@ -40,8 +42,9 @@ class APIClient(private val authToken: Option[String]) {
   }
 
   /**
-    * Parses a JSON string to either a List[Any] or Map[String, Any], boxing it in an Either.
-    * @param json string of JSON
+    * Parses a JSON string to either a List[Any] (in the case of a JSON array) or Map[String, Any] (in the case of a
+    * JSON object) and returns the result wrapped an Either.
+    * @param json the string of JSON
     * @return a List or a Map
     */
   private def parse(json: String): Either[List[Any], Map[String, Any]] = {
@@ -54,8 +57,12 @@ class APIClient(private val authToken: Option[String]) {
     }
   }
 
-  /** Takes a repository as a Map and returns a Repository
-    * @param repo Map
+  /**
+    * Takes a repository as a Map and returns a Repository object. If languages or the README are requested, makes
+    * additional API calls to retrieve them.
+    * @param repo the Map corresponding to a repository
+    * @param withLanguages whether or not to include a language breakdown of the repository
+    * @param withReadMe whether or not to include the README text for the repository
     * @return Repository of corresponding Map, if available
     */
   private def generateRepo(repo: Any, withLanguages: Boolean, withReadMe: Boolean): Repository = {
@@ -68,22 +75,36 @@ class APIClient(private val authToken: Option[String]) {
         RepositoryResult(stringMap, readMe, languages).toRepository
     }
   }
+
   /**
-    * Takes a sequence of repositories as Lists and returns a sequence of Repositories
-    * Makes an API call to retrieve the language information for each repository.
-    * @param repos the user to look up
+    * Takes a sequence of repositories as Maps and returns a sequence of Repositories. If languages or the README are
+    * requested, makes additional API calls to retrieve them.
+    * @param repos the Maps corresponding to repositories
+    * @param withLanguages whether or not to include a language breakdown of the repositories
+    * @param withReadMe whether or not to include the README text for the repository
     * @return a sequence of repository maps
     */
   private def generateRepos(repos: List[Any], withLanguages: Boolean, withReadMe: Boolean): Seq[Repository] = repos.map(generateRepo(_,withLanguages,withReadMe))
 
+  /**
+    * Requests repository information for a specific user and repository name.
+    * @param user the owner of the repository
+    * @param repo the repository name
+    * @param withLanguages whether or not to include a language breakdown of the repository
+    * @param withReadMe whether or not to include the README text for the repository
+    * @return Repository for the specified user and repository name
+    */
   def getRepo(user: String, repo: String, withLanguages: Boolean = false, withReadMe: Boolean = false): Repository = {
     val json = query(s"/repos/$user/$repo")
     val parsed = parse(json).right.get
     generateRepo(parsed, withLanguages, withReadMe)
   }
+
   /**
     * Requests repository information for a user and generates a sequence of Repository objects.
     * @param user the user to look up
+    * @param withLanguages whether or not to include a language breakdown of the repository
+    * @param withReadMe whether or not to include the README text for the repository
     * @return a sequence of Repository objects
     */
   def getRepos(user: String, withLanguages: Boolean = false, withReadMe: Boolean = false): Seq[Repository] = {
@@ -103,6 +124,11 @@ class APIClient(private val authToken: Option[String]) {
     parsed.transform((str:String, dbl:Any) => dbl.asInstanceOf[Double].toLong)
   }
 
+  /**
+    * Requests the README of a repository
+    * @param repo the fully-qualified repository name (e.g. "username/repository")
+    * @return the repository's README, if available, as a String
+    */
   def getReadMe(repo: String): String = {
     query(s"/repos/$repo/readme", headers = Seq("Accept" -> "application/vnd.github.VERSION.raw"), acceptFailure = true)
   }
@@ -120,7 +146,9 @@ class APIClient(private val authToken: Option[String]) {
 
   /**
     * Performs a repository search and returns the sequence of repositories retrieved.
-    * @param searchQuery the query
+    * @param searchQuery the query, as a SearchQuery object
+    * @param withLanguages whether or not to request a language breakdown of the repository
+    * @param withReadMe whether or not to request the README for the repository
     * @return a sequence of Repositories received in the query result
     */
   def searchRepos(searchQuery: SearchQuery, withLanguages: Boolean = false, withReadMe: Boolean = false): Seq[Repository] = {
@@ -129,6 +157,12 @@ class APIClient(private val authToken: Option[String]) {
     val repoList = result("items").asInstanceOf[List[Any]]
     generateRepos(repoList, withLanguages, withReadMe)
   }
+
+  /**
+    * Performs a repository search and returns the sequence of repositories retrieved.
+    * @param searchQuery the query, as a String
+    * @return a sequence of Repositories received in the query result
+    */
   def searchRepos(searchQuery: String): Seq[Repository] = searchRepos(SearchQuery(searchQuery))
 }
 
