@@ -1,7 +1,5 @@
 package com.dsouzam.githubapi
 
-import java.text.SimpleDateFormat
-
 import scala.io.Source
 import scala.util.Try
 import scala.util.parsing.json._
@@ -72,7 +70,7 @@ class APIClient(private val authToken: Option[String]) {
         val fullName = stringMap("full_name").asInstanceOf[String]
         val languages: Map[String, Long] = if (withLanguages) getLanguages(fullName) else Map[String, Long]()
         val readMe: String = if (withReadMe) getReadMe(fullName) else ""
-        RepositoryResult(stringMap, readMe, languages).toRepository
+        Repository(stringMap, readMe, languages)
     }
   }
 
@@ -140,8 +138,7 @@ class APIClient(private val authToken: Option[String]) {
     */
   def getUser(user: String): User = {
     val json = query(s"/users/$user")
-    val result = UserResult(parse(json).right.get)
-    result.toUser
+    User(parse(json).right.get)
   }
 
   /**
@@ -167,7 +164,6 @@ class APIClient(private val authToken: Option[String]) {
 }
 
 object APIClient {
-  val dateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
   /**
     * Attempts to read the first line of a text file "res/token.txt" for an OAuth access token.
     * This token can be generated from your GitHub account under the developer settings.

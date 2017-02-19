@@ -1,4 +1,4 @@
-import com.dsouzam.githubapi.{Qualifier, SearchQuery}
+import com.dsouzam.githubapi.{Qualifier, RepositorySearchQueryBuilder, SearchQuery, SearchQueryBuilder}
 import org.scalatest.FunSuite
 
 
@@ -19,11 +19,15 @@ class SearchQueryTests extends FunSuite{
     assert(params.length == 3 && params.head == ("q", "wrapper") && params(1) == ("sort", "stars") && params(2) == ("order", "asc"))
   }
   test("qualify") {
-    val query = SearchQuery("wrapper").qualify("user", "dsouzam").qualify("language","Scala").exclude("size","0")
-    assert(query.qualString == " user:\"dsouzam\" language:\"Scala\" -size:\"0\"")
+    val builder = new RepositorySearchQueryBuilder("wrapper").user("dsouzam").language("Scala").exclude("size","0")
+    val query = builder.build
+    val qualifierString = query.getQualifierString
+    assert(Seq("user:\"dsouzam\"", "language:\"Scala\"", "-size:\"0\"").forall(qualifierString.contains(_)))
   }
   test("qualifyOverwrite") {
-    val query = SearchQuery("wrapper").qualify("user", "dsouzam").exclude("user", "dsouzam")
-    assert(query.qualString == " -user:\"dsouzam\"")
+    val builder = new RepositorySearchQueryBuilder("wrapper").user("dsouzam").exclude("user","dsouzam")
+    val query = builder.build
+    val qualifierString = query.getQualifierString
+    assert(qualifierString.trim ==  "-user:\"dsouzam\"")
   }
 }
