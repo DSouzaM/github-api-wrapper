@@ -26,8 +26,14 @@ class APIClient(private val authToken: Option[String]) {
       case None => params
     }
     val response = Http(url).params(authParams).headers(headers).asString
+    val rateLimitRemaining = response.header("X-RateLimit-Remaining").get.toInt
     if (!response.isSuccess) {
-      if (acceptFailure) {
+      if (response.code == 403 && rateLimitRemaining == 0) {
+        val millisToWait = response.header("X-RateLimit-Reset").get.toLong*1000 - System.currentTimeMillis()
+        println(s"Rate limit exceeded! Retrying once the limit resets in ${millisToWait/1000} seconds.")
+        Thread.sleep(millisToWait)
+        query(target, params)
+      } else if (acceptFailure) {
         ""
       } else {
         val result = JSON.parseFull(response.body).get.asInstanceOf[Map[String, Any]]
